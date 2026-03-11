@@ -518,6 +518,12 @@ impl ChannelAdapter for MastodonAdapter {
         Ok(())
     }
 
+    fn suppress_error_responses(&self) -> bool {
+        // Mastodon is a public broadcast channel — posting agent errors as statuses
+        // would expose internal system errors publicly, even at "unlisted" visibility.
+        true
+    }
+
     async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
         let _ = self.shutdown_tx.send(true);
         Ok(())
