@@ -1996,19 +1996,24 @@ impl OpenFangKernel {
                     // Persist usage to database (same as non-streaming path)
                     let model = &manifest.model.model;
                     let cost = MeteringEngine::estimate_cost_with_catalog(
-                        &kernel_clone.model_catalog.read().unwrap_or_else(|e| e.into_inner()),
+                        &kernel_clone
+                            .model_catalog
+                            .read()
+                            .unwrap_or_else(|e| e.into_inner()),
                         model,
                         result.total_usage.input_tokens,
                         result.total_usage.output_tokens,
                     );
-                    let _ = kernel_clone.metering.record(&openfang_memory::usage::UsageRecord {
-                        agent_id,
-                        model: model.clone(),
-                        input_tokens: result.total_usage.input_tokens,
-                        output_tokens: result.total_usage.output_tokens,
-                        cost_usd: cost,
-                        tool_calls: result.iterations.saturating_sub(1),
-                    });
+                    let _ = kernel_clone
+                        .metering
+                        .record(&openfang_memory::usage::UsageRecord {
+                            agent_id,
+                            model: model.clone(),
+                            input_tokens: result.total_usage.input_tokens,
+                            output_tokens: result.total_usage.output_tokens,
+                            cost_usd: cost,
+                            tool_calls: result.iterations.saturating_sub(1),
+                        });
 
                     let _ = kernel_clone
                         .registry
@@ -3226,7 +3231,12 @@ impl OpenFangKernel {
             .find(|e| e.name == def.agent.name);
         let existing_tool_filters: (Vec<String>, Vec<String>) = existing_agent
             .as_ref()
-            .map(|e| (e.manifest.tool_allowlist.clone(), e.manifest.tool_blocklist.clone()))
+            .map(|e| {
+                (
+                    e.manifest.tool_allowlist.clone(),
+                    e.manifest.tool_blocklist.clone(),
+                )
+            })
             .unwrap_or_default();
 
         // Build an agent manifest from the hand definition.
@@ -3245,18 +3255,17 @@ impl OpenFangKernel {
         // Detect API-patched model config: compare the live agent's provider/model/temperature
         // against what HAND.toml would produce. A difference means an API call changed it —
         // preserve those values so they survive respawn.
-        let existing_model_override: Option<(String, String, f32)> =
-            existing_agent.and_then(|e| {
-                let m = &e.manifest.model;
-                if m.provider != hand_provider
-                    || m.model != hand_model
-                    || (m.temperature - def.agent.temperature).abs() > f32::EPSILON
-                {
-                    Some((m.provider.clone(), m.model.clone(), m.temperature))
-                } else {
-                    None
-                }
-            });
+        let existing_model_override: Option<(String, String, f32)> = existing_agent.and_then(|e| {
+            let m = &e.manifest.model;
+            if m.provider != hand_provider
+                || m.model != hand_model
+                || (m.temperature - def.agent.temperature).abs() > f32::EPSILON
+            {
+                Some((m.provider.clone(), m.model.clone(), m.temperature))
+            } else {
+                None
+            }
+        });
 
         let mut manifest = AgentManifest {
             name: def.agent.name.clone(),
@@ -5212,10 +5221,18 @@ impl OpenFangKernel {
             .unwrap_or_default();
 
         if !tool_allowlist.is_empty() {
-            all_tools.retain(|t| tool_allowlist.iter().any(|a| a.to_lowercase() == t.name.to_lowercase()));
+            all_tools.retain(|t| {
+                tool_allowlist
+                    .iter()
+                    .any(|a| a.to_lowercase() == t.name.to_lowercase())
+            });
         }
         if !tool_blocklist.is_empty() {
-            all_tools.retain(|t| !tool_blocklist.iter().any(|b| b.to_lowercase() == t.name.to_lowercase()));
+            all_tools.retain(|t| {
+                !tool_blocklist
+                    .iter()
+                    .any(|b| b.to_lowercase() == t.name.to_lowercase())
+            });
         }
 
         // Step 5: Remove shell_exec if exec_policy denies it.
