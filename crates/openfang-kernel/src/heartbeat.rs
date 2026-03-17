@@ -130,7 +130,7 @@ impl Default for RecoveryTracker {
 ///
 /// This is a pure function — it doesn't start a background task.
 /// The caller (kernel) can run this periodically or in a background task.
-pub fn check_agents(registry: &AgentRegistry, config: &HeartbeatConfig) -> Vec<HeartbeatStatus> {
+pub fn check_agents(registry: &AgentRegistry, _config: &HeartbeatConfig) -> Vec<HeartbeatStatus> {
     let now = Utc::now();
     let mut statuses = Vec::new();
 
@@ -143,16 +143,19 @@ pub fn check_agents(registry: &AgentRegistry, config: &HeartbeatConfig) -> Vec<H
 
         let inactive_secs = (now - entry_ref.last_active).num_seconds();
 
-        // Determine timeout: use agent's autonomous config if set, else default
-        let timeout_secs = entry_ref
+        // Non-autonomous (reactive) agents have no inactivity timeout: they wait
+        // indefinitely for incoming messages and are never unresponsive due to
+        // idleness. Only autonomous agents need the inactivity check.
+        let timeout_secs: Option<i64> = entry_ref
             .manifest
             .autonomous
             .as_ref()
-            .map(|a| a.heartbeat_interval_secs * UNRESPONSIVE_MULTIPLIER)
-            .unwrap_or(config.default_timeout_secs) as i64;
+            .map(|a| (a.heartbeat_interval_secs * UNRESPONSIVE_MULTIPLIER) as i64);
 
-        // Crashed agents are always considered unresponsive
-        let unresponsive = entry_ref.state == AgentState::Crashed || inactive_secs > timeout_secs;
+        let unresponsive = match timeout_secs {
+            Some(t) => entry_ref.state == AgentState::Crashed || inactive_secs > t,
+            None => entry_ref.state == AgentState::Crashed,
+        };
 
         if unresponsive && entry_ref.state == AgentState::Running {
             warn!(
